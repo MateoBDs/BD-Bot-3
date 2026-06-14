@@ -1,6 +1,5 @@
 import os
 import asyncio
-import random
 import json
 from datetime import datetime, timezone
 
@@ -37,8 +36,6 @@ def save_config(data):
         json.dump(data, f, indent=2)
 
 config = load_config()
-
-# guild_id -> role_id
 WELCOME_ROLES = config.get("welcome_roles", {})
 
 # =========================
@@ -49,7 +46,6 @@ intents.members = True
 intents.message_content = True
 
 bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
-
 
 # =========================
 # READY
@@ -63,9 +59,8 @@ async def on_ready():
             print(f"❌ Saliendo de {guild.name} ({guild.id})")
             await guild.leave()
 
-
 # =========================
-# COMANDO: SET ROLE
+# SET ROLE BIENVENIDA
 # =========================
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -75,13 +70,9 @@ async def setrole(ctx, role: discord.Role):
         return
 
     WELCOME_ROLES[str(ctx.guild.id)] = role.id
-
-    save_config({
-        "welcome_roles": WELCOME_ROLES
-    })
+    save_config({"welcome_roles": WELCOME_ROLES})
 
     await ctx.send(f"✅ Rol de bienvenida configurado: {role.mention}")
-
 
 # =========================
 # WELCOME + AUTO ROLE
@@ -92,9 +83,6 @@ async def on_member_join(member: discord.Member):
     if member.guild.id not in ALLOWED_GUILD_IDS:
         return
 
-    # ────────────────
-    # AUTO ROLE
-    # ────────────────
     role_id = WELCOME_ROLES.get(str(member.guild.id))
 
     if role_id:
@@ -105,9 +93,6 @@ async def on_member_join(member: discord.Member):
             except Exception as e:
                 print(f"❌ Error dando rol: {e}")
 
-    # ────────────────
-    # BIENVENIDA
-    # ────────────────
     channel = member.guild.system_channel or discord.utils.get(
         member.guild.text_channels,
         permissions__send_messages=True
@@ -119,10 +104,9 @@ async def on_member_join(member: discord.Member):
     embed = discord.Embed(
         title="✨ Bienvenido/a al servidor",
         description=(
-            f"👋 Hola {member.mention}\n\n"
+            f"👋 Hola {member.mention}\n"
             f"💜 Bienvenido a **{member.guild.name}**\n"
-            f"🌟 Esperamos que disfrutes tu estancia\n\n"
-            f"📌 Lee las normas y preséntate"
+            f"📌 Lee las normas"
         ),
         color=discord.Color.from_rgb(120, 80, 255),
         timestamp=datetime.now(timezone.utc)
@@ -134,12 +118,11 @@ async def on_member_join(member: discord.Member):
         embed.set_image(url=member.guild.icon.url)
 
     embed.set_footer(
-        text=f"Eres el miembro #{member.guild.member_count}",
+        text=f"Miembro #{member.guild.member_count}",
         icon_url=member.guild.icon.url if member.guild.icon else None
     )
 
     await channel.send(embed=embed)
-
 
 # =========================
 # BOOST EVENT
@@ -162,17 +145,13 @@ async def on_member_update(before, after):
 
         embed = discord.Embed(
             title="🚀 Nuevo Boost!",
-            description=(
-                f"💜 {after.mention} ha impulsado el servidor\n"
-                f"✨ ¡Gracias por el apoyo!"
-            ),
+            description=f"💜 {after.mention} ha impulsado el servidor",
             color=discord.Color.purple()
         )
 
         embed.set_thumbnail(url=after.display_avatar.url)
 
         await channel.send(embed=embed)
-
 
 # =========================
 # PING
@@ -181,9 +160,58 @@ async def on_member_update(before, after):
 async def ping(ctx):
     await ctx.send(f"🏓 `{round(bot.latency * 1000)}ms`")
 
+# =========================
+# PURGE
+# =========================
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def purge(ctx, amount: int):
+
+    if amount <= 0:
+        return await ctx.send("❌ Número inválido")
+
+    deleted = await ctx.channel.purge(limit=amount + 1)
+
+    msg = await ctx.send(f"🧹 Eliminados **{len(deleted) - 1}** mensajes")
+    await asyncio.sleep(3)
+    await msg.delete()
+
+# =========================
+# SERVER INFO
+# =========================
+@bot.command()
+async def server(ctx):
+
+    g = ctx.guild
+
+    owner = g.owner
+    created = g.created_at.strftime("%d/%m/%Y")
+
+    embed = discord.Embed(
+        title=f"📊 Info de {g.name}",
+        color=discord.Color.blurple(),
+        timestamp=datetime.now(timezone.utc)
+    )
+
+    if g.icon:
+        embed.set_thumbnail(url=g.icon.url)
+
+    embed.add_field(name="👑 Owner", value=owner.mention if owner else "Desconocido", inline=True)
+    embed.add_field(name="🆔 ID", value=g.id, inline=True)
+    embed.add_field(name="📅 Creado", value=created, inline=True)
+
+    embed.add_field(name="👥 Miembros", value=g.member_count, inline=True)
+    embed.add_field(name="🎭 Roles", value=len(g.roles), inline=True)
+    embed.add_field(name="💬 Canales", value=len(g.channels), inline=True)
+
+    embed.set_footer(
+        text=f"Solicitado por {ctx.author}",
+        icon_url=ctx.author.display_avatar.url
+    )
+
+    await ctx.send(embed=embed)
 
 # =========================
 # RUN
 # =========================
 bot.run(TOKEN)
-
