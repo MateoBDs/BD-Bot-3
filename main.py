@@ -185,4 +185,5 @@ async def ping(ctx):
 # =========================
 # RUN
 # =========================
-bot.run(TOKEN)======
+bot.run(TOKEN)
+
