@@ -272,6 +272,27 @@ async def on_member_update(before, after):
         return
 
     if before.premium_since is None and after.premium_since is not None:
+
+        channel = after.guild.system_channel or discord.utils.get(
+            after.guild.text_channels,
+            permissions__send_messages=True
+        )
+
+        if not channel:
+            return
+
+        embed = discord.Embed(
+            title="🚀 Nuevo Boost!",
+            description=(
+                f"💜 {after.mention} ha impulsado el servidor\n"
+                f"✨ ¡Gracias por el apoyo!"
+            ),
+            color=discord.Color.purple()
+        )
+
+        embed.set_thumbnail(url=after.display_avatar.url)
+
+        await channel.send(embed=embed)
         
 # =========================
 # RUN
