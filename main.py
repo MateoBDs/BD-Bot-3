@@ -11,6 +11,10 @@ load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = os.getenv("PREFIX", "bd")
+ALLOWED_GUILD_IDS = [
+    1515342135636004977,
+    1511755312162668815
+]
 
 # =========================
 # INTENTS
@@ -29,6 +33,10 @@ bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 async def on_ready():
     print(f"✅ Conectado como {bot.user}")
 
+    for guild in bot.guilds:
+        if guild.id not in ALLOWED_GUILD_IDS:
+            print(f"❌ Saliendo de {guild.name} ({guild.id})")
+            await guild.leave()
 
 # =========================
 # WELCOME (MEJORADO)
@@ -254,7 +262,17 @@ async def help(ctx):
 
     await ctx.send(embed=embed)
 
+# =========================
+# BOOST EVENT (PRIVADO)
+# =========================
+@bot.event
+async def on_member_update(before, after):
 
+    if after.guild.id not in ALLOWED_GUILD_IDS:
+        return
+
+    if before.premium_since is None and after.premium_since is not None:
+        
 # =========================
 # RUN
 # =========================
