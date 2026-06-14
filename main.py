@@ -1,8 +1,7 @@
 import os
-import json
 import asyncio
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import discord
 from discord.ext import commands
@@ -17,214 +16,193 @@ PREFIX = os.getenv("PREFIX", "bd")
 # INTENTS
 # =========================
 intents = discord.Intents.default()
-intents.message_content = True
 intents.members = True
-intents.guilds = True
-intents.reactions = True
+intents.message_content = True
 
 bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 
-# =========================
-# GIVEAWAYS STORAGE
-# =========================
-DATA_FILE = "giveaways.json"
-
-def load_giveaways():
-    if not os.path.exists(DATA_FILE):
-        return {}
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
-
-def save_giveaways(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
-
-active_giveaways = load_giveaways()
-
 
 # =========================
-# UTILS
-# =========================
-def parse_duration(duration: str) -> int:
-    units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
-
-    duration = duration.lower().strip()
-    if len(duration) < 2:
-        raise ValueError("Duración inválida")
-
-    unit = duration[-1]
-    value = duration[:-1]
-
-    if unit not in units:
-        raise ValueError("Usa s, m, h o d")
-
-    if not value.isdigit():
-        raise ValueError("Debe ser número")
-
-    return int(value) * units[unit]
-
-
-def format_time(dt: datetime):
-    return dt.strftime("%d/%m/%Y %H:%M UTC")
-
-
-async def get_welcome_channel(member: discord.Member):
-    guild = member.guild
-
-    return (
-        guild.system_channel
-        or discord.utils.get(guild.text_channels, permissions__send_messages=True)
-    )
-
-
-# =========================
-# EVENTS
+# READY
 # =========================
 @bot.event
 async def on_ready():
-    print(f"✅ Bot conectado como {bot.user}")
+    print(f"✅ Conectado como {bot.user}")
 
 
+# =========================
+# WELCOME (MEJORADO)
+# =========================
 @bot.event
 async def on_member_join(member: discord.Member):
-    channel = await get_welcome_channel(member)
+
+    channel = member.guild.system_channel or discord.utils.get(
+        member.guild.text_channels,
+        permissions__send_messages=True
+    )
+
     if not channel:
         return
 
     embed = discord.Embed(
-        title="👋 Bienvenido",
-        description=f"{member.mention} se ha unido a **{member.guild.name}**",
-        color=discord.Color.green(),
+        title="✨ Bienvenido/a al servidor",
+        description=(
+            f"👋 Hola {member.mention}\n\n"
+            f"💜 Bienvenido a **{member.guild.name}**\n"
+            f"🌟 Esperamos que disfrutes tu estancia\n\n"
+            f"📌 Lee las normas y preséntate"
+        ),
+        color=discord.Color.from_rgb(120, 80, 255),
         timestamp=datetime.now(timezone.utc)
     )
+
     embed.set_thumbnail(url=member.display_avatar.url)
-    embed.set_footer(text=f"Miembros: {member.guild.member_count}")
+    embed.set_image(url=member.guild.icon.url if member.guild.icon else discord.Embed.Empty)
+
+    embed.set_footer(
+        text=f"Eres el miembro #{member.guild.member_count}",
+        icon_url=member.guild.icon.url if member.guild.icon else None
+    )
 
     await channel.send(embed=embed)
 
 
+# =========================
+# BOOST EVENT
+# =========================
 @bot.event
 async def on_member_update(before, after):
     if before.premium_since is None and after.premium_since is not None:
-        channel = await get_welcome_channel(after)
+
+        channel = after.guild.system_channel or discord.utils.get(
+            after.guild.text_channels,
+            permissions__send_messages=True
+        )
+
         if not channel:
             return
 
         embed = discord.Embed(
-            title="🚀 Nuevo Boost",
-            description=f"{after.mention} ha boosteado el servidor ❤️",
-            color=discord.Color.purple(),
-            timestamp=datetime.now(timezone.utc)
+            title="🚀 Nuevo Boost!",
+            description=(
+                f"💜 {after.mention} ha impulsado el servidor\n"
+                f"✨ ¡Gracias por el apoyo!"
+            ),
+            color=discord.Color.purple()
         )
+
         embed.set_thumbnail(url=after.display_avatar.url)
 
         await channel.send(embed=embed)
 
 
 # =========================
-# COMMANDS
+# PING
 # =========================
 @bot.command()
 async def ping(ctx):
     await ctx.send(f"🏓 `{round(bot.latency * 1000)}ms`")
 
 
+# =========================
+# SERVER INFO (ESTILO DASHBOARD)
+# =========================
 @bot.command()
 async def server(ctx):
     g = ctx.guild
 
+    owner = g.owner
+    created = g.created_at.strftime("%d/%m/%Y")
+
+    text = len(g.text_channels)
+    voice = len(g.voice_channels)
+    roles = len(g.roles)
+
+    boosts = g.premium_subscription_count or 0
+    level = g.premium_tier
+
     embed = discord.Embed(
-        title=f"📊 {g.name}",
+        title=f"📊 Dashboard de {g.name}",
         color=discord.Color.blurple(),
         timestamp=datetime.now(timezone.utc)
     )
 
-    embed.add_field(name="👑 Owner", value=g.owner.mention if g.owner else "N/A")
-    embed.add_field(name="👥 Miembros", value=g.member_count)
-    embed.add_field(name="💬 Canales", value=len(g.channels))
-    embed.add_field(name="🎭 Roles", value=len(g.roles))
-    embed.add_field(name="🚀 Boosts", value=g.premium_subscription_count)
-
     if g.icon:
         embed.set_thumbnail(url=g.icon.url)
+
+    embed.add_field(
+        name="👑 Propietario",
+        value=owner.mention if owner else "Desconocido",
+        inline=True
+    )
+
+    embed.add_field(name="🆔 ID", value=g.id, inline=True)
+    embed.add_field(name="📅 Creado", value=created, inline=True)
+
+    embed.add_field(name="👥 Miembros", value=g.member_count, inline=True)
+    embed.add_field(name="🎭 Roles", value=roles, inline=True)
+    embed.add_field(name="🚀 Boosts", value=boosts, inline=True)
+
+    embed.add_field(name="📈 Nivel Boost", value=level, inline=True)
+    embed.add_field(name="💬 Canales texto", value=text, inline=True)
+    embed.add_field(name="🔊 Canales voz", value=voice, inline=True)
+
+    embed.add_field(
+        name="🔐 Verificación",
+        value=str(g.verification_level).capitalize(),
+        inline=True
+    )
+
+    embed.add_field(
+        name="😴 AFK",
+        value=g.afk_channel.mention if g.afk_channel else "No configurado",
+        inline=True
+    )
+
+    embed.set_footer(
+        text=f"Solicitado por {ctx.author}",
+        icon_url=ctx.author.display_avatar.url
+    )
 
     await ctx.send(embed=embed)
 
 
+# =========================
+# PURGE
+# =========================
 @bot.command()
 @commands.has_permissions(manage_messages=True)
 async def purge(ctx, amount: int):
+
     if amount <= 0:
-        return await ctx.send("Número inválido")
+        return await ctx.send("❌ Número inválido")
 
     deleted = await ctx.channel.purge(limit=amount + 1)
-    msg = await ctx.send(f"🧹 Eliminados {len(deleted)-1} mensajes")
 
+    msg = await ctx.send(f"🧹 Eliminados **{len(deleted)-1}** mensajes")
     await asyncio.sleep(3)
     await msg.delete()
 
 
 # =========================
-# GIVEAWAYS SYSTEM (NO BLOCKING)
+# GIVEAWAY SIMPLE
 # =========================
-async def finish_giveaway(message_id: str, channel_id: int, guild_id: int, prize: str, seconds: int):
-    await asyncio.sleep(seconds)
-
-    guild = bot.get_guild(guild_id)
-    if not guild:
-        return
-
-    channel = guild.get_channel(channel_id)
-    if not channel:
-        return
-
-    try:
-        msg = await channel.fetch_message(int(message_id))
-    except:
-        return
-
-    users = []
-
-    for reaction in msg.reactions:
-        if str(reaction.emoji) == "🎉":
-            async for u in reaction.users():
-                if not u.bot:
-                    users.append(u)
-
-    if not users:
-        await channel.send(f"❌ Sorteo de **{prize}** sin participantes")
-        return
-
-    winner = random.choice(users)
-
-    embed = discord.Embed(
-        title="🎉 Sorteo Finalizado",
-        description=f"🏆 Premio: **{prize}**\n👑 Ganador: {winner.mention}",
-        color=discord.Color.green()
-    )
-
-    await channel.send(embed=embed)
-
-    active_giveaways.pop(message_id, None)
-    save_giveaways(active_giveaways)
-
-
 @bot.command()
 @commands.has_permissions(manage_guild=True)
 async def gstart(ctx, duration: str, *, prize: str):
-    try:
-        seconds = parse_duration(duration)
-    except Exception as e:
-        return await ctx.send(f"❌ {e}")
 
-    end_time = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+    units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+
+    try:
+        time = int(duration[:-1]) * units[duration[-1]]
+    except:
+        return await ctx.send("❌ Usa formato: 10m, 1h, 30s")
 
     embed = discord.Embed(
-        title="🎉 GIVEAWAY",
+        title="🎉 SORTEO ACTIVO",
         description=(
-            f"🏆 **{prize}**\n"
-            f"👤 Host: {ctx.author.mention}\n"
-            f"⏰ Termina: {format_time(end_time)}\n\n"
+            f"🏆 Premio: **{prize}**\n"
+            f"👤 Host: {ctx.author.mention}\n\n"
             f"Reacciona 🎉 para participar"
         ),
         color=discord.Color.gold()
@@ -233,18 +211,29 @@ async def gstart(ctx, duration: str, *, prize: str):
     msg = await ctx.send(embed=embed)
     await msg.add_reaction("🎉")
 
-    active_giveaways[str(msg.id)] = {
-        "channel_id": ctx.channel.id,
-        "guild_id": ctx.guild.id,
-        "prize": prize,
-        "end": end_time.isoformat()
-    }
+    await asyncio.sleep(time)
 
-    save_giveaways(active_giveaways)
+    msg = await ctx.channel.fetch_message(msg.id)
 
-    asyncio.create_task(
-        finish_giveaway(str(msg.id), ctx.channel.id, ctx.guild.id, prize, seconds)
+    users = []
+    for r in msg.reactions:
+        if str(r.emoji) == "🎉":
+            async for u in r.users():
+                if not u.bot:
+                    users.append(u)
+
+    if not users:
+        return await ctx.send("❌ No hubo participantes")
+
+    winner = random.choice(users)
+
+    end = discord.Embed(
+        title="🏆 Sorteo Finalizado",
+        description=f"🎉 Ganador: {winner.mention}\n🏆 Premio: **{prize}**",
+        color=discord.Color.green()
     )
+
+    await ctx.send(embed=end)
 
 
 # =========================
@@ -252,6 +241,7 @@ async def gstart(ctx, duration: str, *, prize: str):
 # =========================
 @bot.command()
 async def help(ctx):
+
     embed = discord.Embed(
         title="📚 Comandos",
         color=discord.Color.blurple()
@@ -259,13 +249,13 @@ async def help(ctx):
 
     embed.add_field(name="bdping", value="Latencia del bot", inline=False)
     embed.add_field(name="bdserver", value="Info del servidor", inline=False)
-    embed.add_field(name="bdpurge <n>", value="Borrar mensajes", inline=False)
-    embed.add_field(name="bdgstart <tiempo> <premio>", value="Sorteo", inline=False)
+    embed.add_field(name="bdpurge", value="Borrar mensajes", inline=False)
+    embed.add_field(name="bdgstart", value="Sorteos", inline=False)
 
     await ctx.send(embed=embed)
 
 
 # =========================
-# RUN BOT
+# RUN
 # =========================
 bot.run(TOKEN)
